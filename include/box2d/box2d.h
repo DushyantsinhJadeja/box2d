@@ -668,10 +668,10 @@ B2_API int b2Shape_GetContactData( b2ShapeId shapeId, b2ContactData* contactData
 /// Get the maximum capacity required for retrieving all the overlapped shapes on a sensor shape.
 /// This returns 0 if the provided shape is not a sensor.
 /// @param shapeId the id of a sensor shape
-/// @returns the required capacity to get all the overlaps in b2Shape_GetSensorOverlaps
+/// @returns the required capacity to get all the overlaps in b2Shape_GetSensorData
 B2_API int b2Shape_GetSensorCapacity( b2ShapeId shapeId );
 
-/// Get the overlap data for a sensor shape.
+/// Get the overlap data for a sensor shape computed the previous world step.
 /// @param shapeId the id of a sensor shape
 /// @param visitorIds a user allocated array that is filled with the overlapping shapes (visitors)
 /// @param capacity the capacity of overlappedShapes

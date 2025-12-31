@@ -212,6 +212,8 @@ void b2RemoveContactFromGraph( b2World* world, int bodyIdA, int bodyIdB, int col
 	}
 }
 
+// Notice that a joint cannot share the same color as a contact between the same two bodies. This means I can solve contacts and joints
+// in parallel with each other within each color.
 static int b2AssignJointColor( b2ConstraintGraph* graph, int bodyIdA, int bodyIdB, b2BodyType typeA, b2BodyType typeB )
 {
 	B2_ASSERT( typeA == b2_dynamicBody || typeB == b2_dynamicBody );

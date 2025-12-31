@@ -85,9 +85,12 @@ b2DynamicTree b2DynamicTree_Create( void )
 	tree.nodeCapacity = 16;
 	tree.nodeCount = 0;
 	tree.nodes = (b2TreeNode*)b2Alloc( tree.nodeCapacity * sizeof( b2TreeNode ) );
+
+	// todo eliminate this memset
 	memset( tree.nodes, 0, tree.nodeCapacity * sizeof( b2TreeNode ) );
 
 	// Build a linked list for the free list.
+	// todo use a bump allocation scheme to avoid this work
 	for ( int i = 0; i < tree.nodeCapacity - 1; ++i )
 	{
 		tree.nodes[i].next = i + 1;
@@ -133,11 +136,14 @@ static int b2AllocateNode( b2DynamicTree* tree )
 		tree->nodes = (b2TreeNode*)b2Alloc( tree->nodeCapacity * sizeof( b2TreeNode ) );
 		B2_ASSERT( oldNodes != NULL );
 		memcpy( tree->nodes, oldNodes, tree->nodeCount * sizeof( b2TreeNode ) );
+
+		// todo eliminate this memset
 		memset( tree->nodes + tree->nodeCount, 0, ( tree->nodeCapacity - tree->nodeCount ) * sizeof( b2TreeNode ) );
+
 		b2Free( oldNodes, oldCapacity * sizeof( b2TreeNode ) );
 
 		// Build a linked list for the free list. The parent pointer becomes the "next" pointer.
-		// todo avoid building freelist?
+		// todo avoid building freelist using bump allocator
 		for ( int i = tree->nodeCount; i < tree->nodeCapacity - 1; ++i )
 		{
 			tree->nodes[i].next = i + 1;

@@ -683,6 +683,12 @@ static void b2FinalizeBodiesTask( int startIndex, int endIndex, uint32_t threadI
 		b2Vec2 v = state->linearVelocity;
 		float w = state->angularVelocity;
 
+		if ( b2IsValidVec2(v) == false)
+		{
+			b2Body* debugBody = bodies + sim->bodyId;
+			b2Log( "bad body: %s\n", debugBody->name );
+		}
+
 		B2_ASSERT( b2IsValidVec2( v ) );
 		B2_ASSERT( b2IsValidFloat( w ) );
 
