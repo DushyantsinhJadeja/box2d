@@ -9,6 +9,8 @@
 #include "box2d/collision.h"
 #include "box2d/types.h"
 
+#define B2_USE_ADD_PAIRS_TASK 1
+
 typedef struct b2Shape b2Shape;
 typedef struct b2World b2World;
 
@@ -100,7 +102,7 @@ typedef struct b2ContactSim
 {
 	int contactId;
 
-#if B2_VALIDATE
+#if B2_ENABLE_VALIDATION
 	int bodyIdA;
 	int bodyIdB;
 #endif
@@ -130,9 +132,14 @@ typedef struct b2ContactSim
 	uint32_t simFlags;
 
 	b2SimplexCache cache;
+
+	int constraintIndex;
+	int constraintLane;
+
 } b2ContactSim;
 
 void b2InitializeContactRegisters( void );
+bool b2CanCollide( b2ShapeType typeA, b2ShapeType typeB );
 
 void b2CreateContact( b2World* world, b2Shape* shapeA, b2Shape* shapeB );
 void b2DestroyContact( b2World* world, b2Contact* contact, bool wakeBodies );

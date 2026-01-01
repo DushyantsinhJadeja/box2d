@@ -19,9 +19,9 @@
 #endif
 
 #if defined( BOX2D_VALIDATE ) && !defined( NDEBUG )
-	#define B2_VALIDATE 1
+	#define B2_ENABLE_VALIDATION 1
 #else
-	#define B2_VALIDATE 0
+	#define B2_ENABLE_VALIDATION 0
 #endif
 
 // Define platform
@@ -153,8 +153,16 @@ void* b2GrowAlloc( void* oldMem, int oldSize, int newSize );
 void b2Log( const char* format, ... );
 
 typedef struct b2Mutex b2Mutex;
+typedef struct b2ReaderWriterMutex b2ReaderWriterMutex;
 
 b2Mutex* b2CreateMutex( void );
 void b2DestroyMutex( b2Mutex* m );
 void b2LockMutex( b2Mutex* m );
 void b2UnlockMutex( b2Mutex* m );
+
+b2ReaderWriterMutex* b2CreateReaderWriterMutex( void );
+void b2DestroyReaderWriterMutex( b2ReaderWriterMutex* m );
+void b2LockRead( b2ReaderWriterMutex* m );
+void b2UnlockRead( b2ReaderWriterMutex* m );
+void b2LockWrite( b2ReaderWriterMutex* m );
+void b2UnlockWrite( b2ReaderWriterMutex* m );

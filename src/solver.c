@@ -1477,7 +1477,7 @@ void b2Solve( b2World* world, b2StepContext* stepContext )
 		b2JointSim** joints = b2AllocateArenaItem( &world->arena, awakeJointCount * sizeof( b2JointSim* ), "joint pointers" );
 
 		int simdConstraintSize = b2GetContactConstraintSIMDByteCount();
-		b2ContactConstraintSIMD* simdContactConstraints =
+		b2ContactConstraintWide* simdContactConstraints =
 			b2AllocateArenaItem( &world->arena, simdContactCount * simdConstraintSize, "contact constraint" );
 
 		int overflowContactCount = colors[B2_OVERFLOW_INDEX].contactSims.count;
@@ -1499,12 +1499,12 @@ void b2Solve( b2World* world, b2StepContext* stepContext )
 
 				if ( colorContactCount == 0 )
 				{
-					color->simdConstraints = NULL;
+					color->wideConstraints = NULL;
 				}
 				else
 				{
-					color->simdConstraints =
-						(b2ContactConstraintSIMD*)( (uint8_t*)simdContactConstraints + contactBase * simdConstraintSize );
+					color->wideConstraints =
+						(b2ContactConstraintWide*)( (uint8_t*)simdContactConstraints + contactBase * simdConstraintSize );
 
 					for ( int k = 0; k < colorContactCount; ++k )
 					{

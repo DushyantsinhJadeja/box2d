@@ -452,20 +452,6 @@ static void b2CollideTask( int startIndex, int endIndex, uint32_t threadIndex, v
 	b2TracyCZoneEnd( collide_task );
 }
 
-static void b2UpdateTreesTask( int startIndex, int endIndex, uint32_t threadIndex, void* context )
-{
-	B2_UNUSED( startIndex );
-	B2_UNUSED( endIndex );
-	B2_UNUSED( threadIndex );
-
-	b2TracyCZoneNC( tree_task, "Rebuild BVH", b2_colorFireBrick, true );
-
-	b2World* world = context;
-	b2BroadPhase_RebuildTrees( &world->broadPhase );
-
-	b2TracyCZoneEnd( tree_task );
-}
-
 static void b2AddNonTouchingContact( b2World* world, b2Contact* contact, b2ContactSim* contactSim )
 {
 	B2_ASSERT( contact->setIndex == b2_awakeSet );
@@ -500,13 +486,6 @@ static void b2Collide( b2StepContext* context )
 	B2_ASSERT( world->workerCount > 0 );
 
 	b2TracyCZoneNC( collide, "Narrow Phase", b2_colorDodgerBlue, true );
-
-	// Task that can be done in parallel with the narrow-phase
-	// - rebuild the collision tree for dynamic and kinematic bodies to keep their query performance good
-	// todo_erin move this to start when contacts are being created
-	world->userTreeTask = world->enqueueTaskFcn( &b2UpdateTreesTask, 1, 1, world, world->userTaskContext );
-	world->taskCount += 1;
-	world->activeTaskCount += world->userTreeTask == NULL ? 0 : 1;
 
 	// gather contacts into a single array for easier parallel-for
 	int contactCount = 0;
@@ -794,7 +773,7 @@ void b2World_Step( b2WorldId worldId, float timeStep, int subStepCount )
 	}
 
 	// Integrate velocities, solve velocity constraints, and integrate positions.
-	if ( context.dt > 0.0f )
+	if ( timeStep > 0.0f )
 	{
 		uint64_t solveTicks = b2GetTicks();
 		b2Solve( world, &context );
@@ -825,6 +804,7 @@ void b2World_Step( b2WorldId worldId, float timeStep, int subStepCount )
 	b2SensorEndTouchEventArray_Clear( world->sensorEndEvents + world->endEventArrayIndex );
 	b2ContactEndTouchEventArray_Clear( world->contactEndEvents + world->endEventArrayIndex );
 	world->locked = false;
+
 	b2TracyCFrame;
 }
 
@@ -2539,7 +2519,7 @@ void b2World_EnableSpeculative( b2WorldId worldId, bool flag )
 	world->enableSpeculative = flag;
 }
 
-#if B2_VALIDATE
+#if B2_ENABLE_VALIDATION
 // This validates island graph connectivity for each body
 void b2ValidateConnectivity( b2World* world )
 {

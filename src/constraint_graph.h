@@ -12,8 +12,6 @@
 typedef struct b2Body b2Body;
 typedef struct b2ContactSim b2ContactSim;
 typedef struct b2Contact b2Contact;
-typedef struct b2ContactConstraint b2ContactConstraint;
-typedef struct b2ContactConstraintSIMD b2ContactConstraintSIMD;
 typedef struct b2JointSim b2JointSim;
 typedef struct b2Joint b2Joint;
 typedef struct b2StepContext b2StepContext;
@@ -46,9 +44,13 @@ typedef struct b2GraphColor
 	// transient
 	union
 	{
-		b2ContactConstraintSIMD* simdConstraints;
-		b2ContactConstraint* overflowConstraints;
+		struct b2ContactConstraintWide* wideConstraints;
+		struct b2ContactConstraint* overflowConstraints;
 	};
+
+	int contactConstraintCount;
+	int contactConstraintCapacity;
+
 } b2GraphColor;
 
 typedef struct b2ConstraintGraph

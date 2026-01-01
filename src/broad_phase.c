@@ -8,14 +8,14 @@
 #include "broad_phase.h"
 
 #include "aabb.h"
+#include "arena_allocator.h"
 #include "array.h"
 #include "atomic.h"
 #include "body.h"
 #include "contact.h"
 #include "core.h"
-#include "shape.h"
-#include "arena_allocator.h"
 #include "physics_world.h"
+#include "shape.h"
 
 #include <stdbool.h>
 #include <string.h>
@@ -57,6 +57,7 @@ void b2DestroyBroadPhase( b2BroadPhase* bp )
 
 	b2DestroySet( &bp->moveSet );
 	b2IntArray_Destroy( &bp->moveArray );
+
 	b2DestroySet( &bp->pairSet );
 
 	memset( bp, 0, sizeof( b2BroadPhase ) );
@@ -139,7 +140,6 @@ typedef struct b2MovePair
 	int shapeIndexA;
 	int shapeIndexB;
 	b2MovePair* next;
-	bool heap;
 } b2MovePair;
 
 typedef struct b2MoveResult
@@ -213,7 +213,8 @@ static bool b2PairQueryCallback( int proxyId, uint64_t userData, void* context )
 	}
 
 	uint64_t pairKey = B2_SHAPE_PAIR_KEY( shapeId, queryContext->queryShapeIndex );
-	if ( b2ContainsKey( &broadPhase->pairSet, pairKey ) )
+	bool pairExists = b2ContainsKey( &broadPhase->pairSet, pairKey );
+	if ( pairExists )
 	{
 		// contact exists
 		return true;
@@ -256,6 +257,12 @@ static bool b2PairQueryCallback( int proxyId, uint64_t userData, void* context )
 		return true;
 	}
 
+	if ( b2CanCollide( shapeA->type, shapeB->type ) == false )
+	{
+		// For example, no segment vs segment collision
+		return false;
+	}
+
 	// Does a joint override collision?
 	b2Body* bodyA = b2BodyArray_Get( &world->bodies, bodyIdA );
 	b2Body* bodyB = b2BodyArray_Get( &world->bodies, bodyIdB );
@@ -280,28 +287,47 @@ static bool b2PairQueryCallback( int proxyId, uint64_t userData, void* context )
 		}
 	}
 
-	// todo per thread to eliminate atomic?
 	int pairIndex = b2AtomicFetchAddInt( &broadPhase->movePairIndex, 1 );
+	B2_VALIDATE( pairIndex < broadPhase->movePairCapacity );
 
-	b2MovePair* pair;
 	if ( pairIndex < broadPhase->movePairCapacity )
 	{
-		pair = broadPhase->movePairs + pairIndex;
-		pair->heap = false;
+		b2MovePair* pair = broadPhase->movePairs + pairIndex;
+		pair->shapeIndexA = shapeIdA;
+		pair->shapeIndexB = shapeIdB;
+		pair->next = queryContext->moveResult->pairList;
+		queryContext->moveResult->pairList = pair;
 	}
-	else
-	{
-		pair = b2Alloc( sizeof( b2MovePair ) );
-		pair->heap = true;
-	}
-
-	pair->shapeIndexA = shapeIdA;
-	pair->shapeIndexB = shapeIdB;
-	pair->next = queryContext->moveResult->pairList;
-	queryContext->moveResult->pairList = pair;
 
 	// continue the query
 	return true;
+}
+
+static void b2AddPairsTask( int startIndex, int endIndex, uint32_t threadIndex, void* context )
+{
+	B2_UNUSED( startIndex );
+	B2_UNUSED( endIndex );
+	B2_UNUSED( threadIndex );
+
+	b2TracyCZoneNC( add_pairs_task, "Add Pairs", b2_colorMediumSlateBlue, true );
+
+	b2BroadPhase* bp = context;
+	int moveCount = bp->moveArray.count;
+
+	b2HashSet* pairSet = &bp->pairSet;
+	for ( int i = 0; i < moveCount; ++i )
+	{
+		b2MoveResult* result = bp->moveResults + i;
+		b2MovePair* pair = result->pairList;
+		while ( pair != NULL )
+		{
+			uint64_t pairKey = B2_SHAPE_PAIR_KEY( pair->shapeIndexA, pair->shapeIndexB );
+			b2AddKey( pairSet, pairKey );
+			pair = pair->next;
+		}
+	}
+
+	b2TracyCZoneEnd( add_pairs_task );
 }
 
 // Warning: writing to these globals significantly slows multithreading performance
@@ -379,6 +405,20 @@ static void b2FindPairsTask( int startIndex, int endIndex, uint32_t threadIndex,
 	b2TracyCZoneEnd( pair_task );
 }
 
+static void b2UpdateTreesTask( int startIndex, int endIndex, uint32_t threadIndex, void* context )
+{
+	B2_UNUSED( startIndex );
+	B2_UNUSED( endIndex );
+	B2_UNUSED( threadIndex );
+
+	b2TracyCZoneNC( tree_task, "Rebuild BVH", b2_colorFireBrick, true );
+
+	b2World* world = context;
+	b2BroadPhase_RebuildTrees( &world->broadPhase );
+
+	b2TracyCZoneEnd( tree_task );
+}
+
 void b2UpdateBroadPhasePairs( b2World* world )
 {
 	b2BroadPhase* bp = &world->broadPhase;
@@ -418,9 +458,22 @@ void b2UpdateBroadPhasePairs( b2World* world )
 
 	b2TracyCZoneNC( create_contacts, "Create Contacts", b2_colorCoral, true );
 
+	// Task that can be done in parallel with the narrow-phase
+	// - rebuild the collision tree for dynamic and kinematic bodies to keep their query performance good
+	world->userTreeTask = world->enqueueTaskFcn( &b2UpdateTreesTask, 1, 1, world, world->userTaskContext );
+	world->taskCount += 1;
+	world->activeTaskCount += world->userTreeTask == NULL ? 0 : 1;
+
+#if B2_USE_ADD_PAIRS_TASK == 1
+	void* userAddPairsTask = world->enqueueTaskFcn( &b2AddPairsTask, 1, 1, bp, world->userTaskContext );
+	world->taskCount += 1;
+	world->activeTaskCount += userAddPairsTask == NULL ? 0 : 1;
+#endif
+
 	// Single-threaded work
 	// - Clear move flags
 	// - Create contacts in deterministic order
+	// This is deterministic because the results follow the order of b2BroadPhase::moveArray.
 	for ( int i = 0; i < moveCount; ++i )
 	{
 		b2MoveResult* result = bp->moveResults + i;
@@ -439,17 +492,7 @@ void b2UpdateBroadPhasePairs( b2World* world )
 			b2Shape* shapeB = b2ShapeArray_Get( &world->shapes, shapeIdB );
 
 			b2CreateContact( world, shapeA, shapeB );
-
-			if ( pair->heap )
-			{
-				b2MovePair* temp = pair;
-				pair = pair->next;
-				b2Free( temp, sizeof( b2MovePair ) );
-			}
-			else
-			{
-				pair = pair->next;
-			}
+			pair = pair->next;
 		}
 
 		// if (s_file != NULL)
@@ -457,6 +500,15 @@ void b2UpdateBroadPhasePairs( b2World* world )
 		//	fprintf(s_file, "\n");
 		// }
 	}
+
+#if B2_USE_ADD_PAIRS_TASK == 1
+	if ( userAddPairsTask != NULL )
+	{
+		world->finishTaskFcn( userAddPairsTask, world->userTaskContext );
+		userAddPairsTask = NULL;
+		world->activeTaskCount -= 1;
+	}
+#endif
 
 	// if (s_file != NULL)
 	//{
@@ -475,7 +527,6 @@ void b2UpdateBroadPhasePairs( b2World* world )
 	b2ValidateSolverSets( world );
 
 	b2TracyCZoneEnd( create_contacts );
-
 	b2TracyCZoneEnd( update_pairs );
 }
 
@@ -515,7 +566,7 @@ void b2ValidateBroadphase( const b2BroadPhase* bp )
 
 void b2ValidateNoEnlarged( const b2BroadPhase* bp )
 {
-#if B2_VALIDATE == 1
+#if B2_ENABLE_VALIDATION == 1
 	for ( int j = 0; j < b2_bodyTypeCount; ++j )
 	{
 		const b2DynamicTree* tree = bp->trees + j;

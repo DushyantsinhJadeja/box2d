@@ -813,9 +813,9 @@ int b2DynamicTree_GetProxyCount( const b2DynamicTree* tree )
 
 void b2DynamicTree_MoveProxy( b2DynamicTree* tree, int proxyId, b2AABB aabb )
 {
-	B2_ASSERT( b2IsValidAABB( aabb ) );
-	B2_ASSERT( aabb.upperBound.x - aabb.lowerBound.x < B2_HUGE );
-	B2_ASSERT( aabb.upperBound.y - aabb.lowerBound.y < B2_HUGE );
+	B2_VALIDATE( b2IsValidAABB( aabb ) );
+	B2_VALIDATE( aabb.upperBound.x - aabb.lowerBound.x < B2_HUGE );
+	B2_VALIDATE( aabb.upperBound.y - aabb.lowerBound.y < B2_HUGE );
 	B2_ASSERT( 0 <= proxyId && proxyId < tree->nodeCapacity );
 	B2_ASSERT( b2IsLeaf( tree->nodes + proxyId ) );
 
@@ -831,14 +831,14 @@ void b2DynamicTree_EnlargeProxy( b2DynamicTree* tree, int proxyId, b2AABB aabb )
 {
 	b2TreeNode* nodes = tree->nodes;
 
-	B2_ASSERT( b2IsValidAABB( aabb ) );
-	B2_ASSERT( aabb.upperBound.x - aabb.lowerBound.x < B2_HUGE );
-	B2_ASSERT( aabb.upperBound.y - aabb.lowerBound.y < B2_HUGE );
+	B2_VALIDATE( b2IsValidAABB( aabb ) );
+	B2_VALIDATE( aabb.upperBound.x - aabb.lowerBound.x < B2_HUGE );
+	B2_VALIDATE( aabb.upperBound.y - aabb.lowerBound.y < B2_HUGE );
 	B2_ASSERT( 0 <= proxyId && proxyId < tree->nodeCapacity );
 	B2_ASSERT( b2IsLeaf( tree->nodes + proxyId ) );
 
 	// Caller must ensure this
-	B2_ASSERT( b2AABB_Contains( nodes[proxyId].aabb, aabb ) == false );
+	B2_VALIDATE( b2AABB_Contains( nodes[proxyId].aabb, aabb ) == false );
 
 	nodes[proxyId].aabb = aabb;
 
@@ -945,7 +945,7 @@ b2AABB b2DynamicTree_GetRootBounds( const b2DynamicTree* tree )
 	return empty;
 }
 
-#if B2_VALIDATE
+#if B2_ENABLE_VALIDATION
 // Compute the height of a sub-tree.
 static int b2ComputeHeight( const b2DynamicTree* tree, int nodeId )
 {
@@ -1048,7 +1048,7 @@ static void b2ValidateMetrics( const b2DynamicTree* tree, int index )
 
 void b2DynamicTree_Validate( const b2DynamicTree* tree )
 {
-#if B2_VALIDATE
+#if B2_ENABLE_VALIDATION
 	if ( tree->root == B2_NULL_INDEX )
 	{
 		return;
@@ -1078,7 +1078,7 @@ void b2DynamicTree_Validate( const b2DynamicTree* tree )
 
 void b2DynamicTree_ValidateNoEnlarged( const b2DynamicTree* tree )
 {
-#if B2_VALIDATE == 1
+#if B2_ENABLE_VALIDATION == 1
 	int capacity = tree->nodeCapacity;
 	const b2TreeNode* nodes = tree->nodes;
 	for ( int i = 0; i < capacity; ++i )
@@ -2016,7 +2016,7 @@ int b2DynamicTree_Rebuild( b2DynamicTree* tree, bool fullBuild )
 		node = nodes + nodeIndex;
 	}
 
-#if B2_VALIDATE == 1
+#if B2_ENABLE_VALIDATION == 1
 	int capacity = tree->nodeCapacity;
 	for ( int i = 0; i < capacity; ++i )
 	{

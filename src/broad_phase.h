@@ -44,7 +44,6 @@ typedef struct b2BroadPhase
 	b2AtomicInt movePairIndex;
 
 	// Tracks shape pairs that have a b2Contact
-	// todo pairSet can grow quite large on the first time step and remain large
 	b2HashSet pairSet;
 
 } b2BroadPhase;
@@ -64,6 +63,7 @@ void b2BroadPhase_RebuildTrees( b2BroadPhase* bp );
 int b2BroadPhase_GetShapeIndex( b2BroadPhase* bp, int proxyKey );
 
 void b2UpdateBroadPhasePairs( b2World* world );
+
 bool b2BroadPhase_TestOverlap( const b2BroadPhase* bp, int proxyKeyA, int proxyKeyB );
 
 void b2ValidateBroadphase( const b2BroadPhase* bp );

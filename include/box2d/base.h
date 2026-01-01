@@ -37,6 +37,12 @@
 #endif
 // clang-format on
 
+#if defined( BOX2D_VALIDATE ) && !defined( NDEBUG )
+#define B2_ENABLE_VALIDATION 1
+#else
+#define B2_ENABLE_VALIDATION 0
+#endif
+
 /**
  * @defgroup base Base
  * Base functionality
@@ -117,6 +123,13 @@ B2_API int b2InternalAssertFcn( const char* condition, const char* fileName, int
 	while ( 0 )
 #else
 #define B2_ASSERT( ... ) ( (void)0 )
+#endif
+
+#if B2_ENABLE_VALIDATION
+// Floating point tolerance checks should use this instead of the regular assertion
+#define B2_VALIDATE( condition ) B2_ASSERT( condition )
+#else
+#define B2_VALIDATE( ... ) ( (void)0 )
 #endif
 
 /// Get the absolute number of system ticks. The value is platform specific.

@@ -33,7 +33,7 @@ void b2PrepareOverflowContacts( b2StepContext* context )
 	b2ContactSim* contacts = color->contactSims.data;
 	b2BodyState* awakeStates = context->states;
 
-#if B2_VALIDATE
+#if B2_ENABLE_VALIDATION
 	b2Body* bodies = world->bodies.data;
 #endif
 
@@ -55,7 +55,7 @@ void b2PrepareOverflowContacts( b2StepContext* context )
 		int indexA = contactSim->bodySimIndexA;
 		int indexB = contactSim->bodySimIndexB;
 
-#if B2_VALIDATE
+#if B2_ENABLE_VALIDATION
 		b2Body* bodyA = bodies + contactSim->bodyIdA;
 		int validIndexA = bodyA->setIndex == b2_awakeSet ? bodyA->localIndex : B2_NULL_INDEX;
 		B2_ASSERT( indexA == validIndexA );
@@ -534,43 +534,6 @@ void b2StoreOverflowImpulses( b2StepContext* context )
 
 	b2TracyCZoneEnd( store_impulses );
 }
-
-#if defined( B2_SIMD_AVX2 )
-
-#include <immintrin.h>
-
-// wide float holds 8 numbers
-typedef __m256 b2FloatW;
-
-#elif defined( B2_SIMD_NEON )
-
-#include <arm_neon.h>
-
-// wide float holds 4 numbers
-typedef float32x4_t b2FloatW;
-
-#elif defined( B2_SIMD_SSE2 )
-
-#include <emmintrin.h>
-
-// wide float holds 4 numbers
-typedef __m128 b2FloatW;
-
-#else
-
-// scalar math
-typedef struct b2FloatW
-{
-	float x, y, z, w;
-} b2FloatW;
-
-#endif
-
-// Wide vec2
-typedef struct b2Vec2W
-{
-	b2FloatW X, Y;
-} b2Vec2W;
 
 // Wide rotation
 typedef struct b2RotW
@@ -1058,41 +1021,9 @@ static inline b2Vec2W b2RotateVectorW( b2RotW q, b2Vec2W v )
 // http://mmacklin.com/smallsteps.pdf
 // https://box2d.org/files/ErinCatto_SoftConstraints_GDC2011.pdf
 
-typedef struct b2ContactConstraintSIMD
-{
-	int indexA[B2_SIMD_WIDTH];
-	int indexB[B2_SIMD_WIDTH];
-
-	b2FloatW invMassA, invMassB;
-	b2FloatW invIA, invIB;
-	b2Vec2W normal;
-	b2FloatW friction;
-	b2FloatW tangentSpeed;
-	b2FloatW rollingResistance;
-	b2FloatW rollingMass;
-	b2FloatW rollingImpulse;
-	b2FloatW biasRate;
-	b2FloatW massScale;
-	b2FloatW impulseScale;
-	b2Vec2W anchorA1, anchorB1;
-	b2FloatW normalMass1, tangentMass1;
-	b2FloatW baseSeparation1;
-	b2FloatW normalImpulse1;
-	b2FloatW totalNormalImpulse1;
-	b2FloatW tangentImpulse1;
-	b2Vec2W anchorA2, anchorB2;
-	b2FloatW baseSeparation2;
-	b2FloatW normalImpulse2;
-	b2FloatW totalNormalImpulse2;
-	b2FloatW tangentImpulse2;
-	b2FloatW normalMass2, tangentMass2;
-	b2FloatW restitution;
-	b2FloatW relativeVelocity1, relativeVelocity2;
-} b2ContactConstraintSIMD;
-
 int b2GetContactConstraintSIMDByteCount( void )
 {
-	return sizeof( b2ContactConstraintSIMD );
+	return sizeof( b2ContactConstraintWide );
 }
 
 // wide version of b2BodyState
@@ -1498,9 +1429,9 @@ void b2PrepareContactsTask( int startIndex, int endIndex, b2StepContext* context
 	b2TracyCZoneNC( prepare_contact, "Prepare Contact", b2_colorYellow, true );
 	b2World* world = context->world;
 	b2ContactSim** contacts = context->contacts;
-	b2ContactConstraintSIMD* constraints = context->simdContactConstraints;
+	b2ContactConstraintWide* constraints = context->simdContactConstraints;
 	b2BodyState* awakeStates = context->states;
-#if B2_VALIDATE
+#if B2_ENABLE_VALIDATION
 	b2Body* bodies = world->bodies.data;
 #endif
 
@@ -1513,7 +1444,7 @@ void b2PrepareContactsTask( int startIndex, int endIndex, b2StepContext* context
 
 	for ( int i = startIndex; i < endIndex; ++i )
 	{
-		b2ContactConstraintSIMD* constraint = constraints + i;
+		b2ContactConstraintWide* constraint = constraints + i;
 
 		for ( int j = 0; j < B2_SIMD_WIDTH; ++j )
 		{
@@ -1526,7 +1457,7 @@ void b2PrepareContactsTask( int startIndex, int endIndex, b2StepContext* context
 				int indexA = contactSim->bodySimIndexA;
 				int indexB = contactSim->bodySimIndexB;
 
-#if B2_VALIDATE
+#if B2_ENABLE_VALIDATION
 				b2Body* bodyA = bodies + contactSim->bodyIdA;
 				int validIndexA = bodyA->setIndex == b2_awakeSet ? bodyA->localIndex : B2_NULL_INDEX;
 				b2Body* bodyB = bodies + contactSim->bodyIdB;
@@ -1751,11 +1682,11 @@ void b2WarmStartContactsTask( int startIndex, int endIndex, b2StepContext* conte
 	b2TracyCZoneNC( warm_start_contact, "Warm Start", b2_colorGreen, true );
 
 	b2BodyState* states = context->states;
-	b2ContactConstraintSIMD* constraints = context->graph->colors[colorIndex].simdConstraints;
+	b2ContactConstraintWide* constraints = context->graph->colors[colorIndex].wideConstraints;
 
 	for ( int i = startIndex; i < endIndex; ++i )
 	{
-		b2ContactConstraintSIMD* c = constraints + i;
+		b2ContactConstraintWide* c = constraints + i;
 		b2BodyStateW bA = b2GatherBodies( states, c->indexA );
 		b2BodyStateW bB = b2GatherBodies( states, c->indexB );
 
@@ -1813,14 +1744,14 @@ void b2SolveContactsTask( int startIndex, int endIndex, b2StepContext* context, 
 	b2TracyCZoneNC( solve_contact, "Solve Contact", b2_colorAliceBlue, true );
 
 	b2BodyState* states = context->states;
-	b2ContactConstraintSIMD* constraints = context->graph->colors[colorIndex].simdConstraints;
+	b2ContactConstraintWide* constraints = context->graph->colors[colorIndex].wideConstraints;
 	b2FloatW inv_h = b2SplatW( context->inv_h );
 	b2FloatW contactSpeed = b2SplatW( -context->world->contactSpeed );
 	b2FloatW oneW = b2SplatW( 1.0f );
 
 	for ( int i = startIndex; i < endIndex; ++i )
 	{
-		b2ContactConstraintSIMD* c = constraints + i;
+		b2ContactConstraintWide* c = constraints + i;
 
 		b2BodyStateW bA = b2GatherBodies( states, c->indexA );
 		b2BodyStateW bB = b2GatherBodies( states, c->indexB );
@@ -2053,13 +1984,13 @@ void b2ApplyRestitutionTask( int startIndex, int endIndex, b2StepContext* contex
 	b2TracyCZoneNC( restitution, "Restitution", b2_colorDodgerBlue, true );
 
 	b2BodyState* states = context->states;
-	b2ContactConstraintSIMD* constraints = context->graph->colors[colorIndex].simdConstraints;
+	b2ContactConstraintWide* constraints = context->graph->colors[colorIndex].wideConstraints;
 	b2FloatW threshold = b2SplatW( context->world->restitutionThreshold );
 	b2FloatW zero = b2ZeroW();
 
 	for ( int i = startIndex; i < endIndex; ++i )
 	{
-		b2ContactConstraintSIMD* c = constraints + i;
+		b2ContactConstraintWide* c = constraints + i;
 
 		if ( b2AllZeroW( c->restitution ) )
 		{
@@ -2166,13 +2097,13 @@ void b2StoreImpulsesTask( int startIndex, int endIndex, b2StepContext* context )
 	b2TracyCZoneNC( store_impulses, "Store", b2_colorFireBrick, true );
 
 	b2ContactSim** contacts = context->contacts;
-	const b2ContactConstraintSIMD* constraints = context->simdContactConstraints;
+	const b2ContactConstraintWide* constraints = context->simdContactConstraints;
 
 	b2Manifold dummy = { 0 };
 
 	for ( int constraintIndex = startIndex; constraintIndex < endIndex; ++constraintIndex )
 	{
-		const b2ContactConstraintSIMD* c = constraints + constraintIndex;
+		const b2ContactConstraintWide* c = constraints + constraintIndex;
 		const float* rollingImpulse = (float*)&c->rollingImpulse;
 		const float* normalImpulse1 = (float*)&c->normalImpulse1;
 		const float* normalImpulse2 = (float*)&c->normalImpulse2;
