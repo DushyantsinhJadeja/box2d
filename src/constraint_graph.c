@@ -302,12 +302,12 @@ void b2RemoveContactConstraint( b2World* world, int colorIndex, int localIndex )
 			b2ContactSim* movedContact = b2ContactSimArray_Get( &color->contactSims, contactIndex );
 			movedContact->constraintIndex = constraintIndex;
 		}
-
-		color->contactCount -= 1;
-
-		contactSim->constraintIndex = B2_NULL_INDEX;
-		contactSim->colorIndex = B2_NULL_INDEX;
 	}
+
+	color->contactCount -= 1;
+
+	contactSim->constraintIndex = B2_NULL_INDEX;
+	contactSim->colorIndex = B2_NULL_INDEX;
 }
 
 void b2RemoveContactFromGraph( b2World* world, int bodyIdA, int bodyIdB, int colorIndex, int localIndex )

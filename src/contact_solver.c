@@ -2189,7 +2189,8 @@ void b2PrepareContact( b2StepContext* context, int colorIndex, int contactIndex 
 	b2World* world = context->world;
 	b2GraphColor* color = world->constraintGraph.colors + colorIndex;
 	b2ContactSim* contact = b2ContactSimArray_Get( &color->contactSims, contactIndex );
-	b2BodyState* states = context->states;
+	b2SolverSet* awakeSet = b2SolverSetArray_Get( &world->solverSets, b2_awakeSet );
+	b2BodyState* states = awakeSet->bodyStates.data;
 
 #if B2_ENABLE_VALIDATION
 	b2Body* bodies = world->bodies.data;

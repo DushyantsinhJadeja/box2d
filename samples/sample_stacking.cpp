@@ -458,7 +458,7 @@ public:
 		b2ShapeDef shapeDef = b2DefaultShapeDef();
 		shapeDef.enableHitEvents = true;
 		// shapeDef.rollingResistance = 0.2f;
-		shapeDef.material.friction = 0.0f;
+		//shapeDef.material.friction = 0.0f;
 
 		float y = 0.75f;
 
