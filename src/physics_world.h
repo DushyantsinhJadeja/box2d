@@ -109,7 +109,9 @@ typedef struct b2World
 	b2ContactHitEventArray contactHitEvents;
 	b2JointEventArray jointEvents;
 
-	//b2UInt64Array pendingPairs;
+	// These are contacts that need to be prepared. This includes
+	// all touching contacts that 
+	b2ContactIdArray pendingContacts;
 
 	// todo consider deferred waking and impulses to make it possible
 	// to apply forces and impulses from multiple threads

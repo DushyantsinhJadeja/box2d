@@ -29,7 +29,7 @@ struct SampleContext
 	int subStepCount = 4;
 	int workerCount = 1;
 	bool restart = false;
-	bool pause = false;
+	bool pause = true;
 	bool singleStep = false;
 	bool drawCounters = false;
 	bool drawProfile = false;

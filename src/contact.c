@@ -19,6 +19,7 @@
 
 B2_ARRAY_SOURCE( b2Contact, b2Contact )
 B2_ARRAY_SOURCE( b2ContactSim, b2ContactSim )
+B2_ARRAY_SOURCE( b2ContactId, b2ContactId )
 
 // Contacts and determinism
 // A deterministic simulation requires contacts to exist in the same order in b2Island no matter the thread count.
@@ -370,6 +371,9 @@ void b2CreateContact( b2World* world, b2Shape* shapeA, b2Shape* shapeB )
 	{
 		contactSim->simFlags |= b2_simEnablePreSolveEvents;
 	}
+
+	contactSim->constraintIndex = B2_NULL_INDEX;
+	contactSim->colorIndex = B2_NULL_INDEX;
 }
 
 // A contact is destroyed when:

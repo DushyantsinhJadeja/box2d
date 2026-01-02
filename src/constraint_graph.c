@@ -7,6 +7,7 @@
 #include "bitset.h"
 #include "body.h"
 #include "contact.h"
+#include "contact_solver.h"
 #include "joint.h"
 #include "physics_world.h"
 #include "solver_set.h"
@@ -24,7 +25,7 @@
 // todo should be possible to branch on the scatters to avoid writing to kinematic bodies
 
 // This is used for debugging by making all constraints be assigned to overflow.
-#define B2_FORCE_OVERFLOW 0
+#define B2_FORCE_OVERFLOW 1
 
 void b2CreateGraph( b2ConstraintGraph* graph, int bodyCapacity )
 {
@@ -59,10 +60,19 @@ void b2DestroyGraph( b2ConstraintGraph* graph )
 
 		b2ContactSimArray_Destroy( &color->contactSims );
 		b2JointSimArray_Destroy( &color->jointSims );
+
+		if ( i == B2_OVERFLOW_INDEX )
+		{
+			b2Free( color->overflowConstraints, color->wideContactCapacity * sizeof( b2ContactConstraint ) );
+		}
+		else
+		{
+			b2Free( color->wideConstraints, color->wideContactCapacity * sizeof( b2ContactConstraintWide ) );
+		}
 	}
 }
 
-// Contacts are always created as non-touching. They get cloned into the constraint
+// Contacts are always created as non-touching. They get moved into the constraint
 // graph once they are found to be touching.
 void b2AddContactToGraph( b2World* world, b2ContactSim* contactSim, b2Contact* contact )
 {
@@ -83,7 +93,7 @@ void b2AddContactToGraph( b2World* world, b2ContactSim* contactSim, b2Contact* c
 	B2_ASSERT( typeA == b2_dynamicBody || typeB == b2_dynamicBody );
 
 #if B2_FORCE_OVERFLOW == 0
-	if (typeA == b2_dynamicBody && typeB == b2_dynamicBody)
+	if ( typeA == b2_dynamicBody && typeB == b2_dynamicBody )
 	{
 		// Dynamic constraint colors cannot encroach on colors reserved for static constraints
 		for ( int i = 0; i < B2_DYNAMIC_COLOR_COUNT; ++i )
@@ -180,14 +190,133 @@ void b2AddContactToGraph( b2World* world, b2ContactSim* contactSim, b2Contact* c
 		newContact->invMassB = bodySimB->invMass;
 		newContact->invIB = bodySimB->invInertia;
 	}
+
+	// Allocate a contact constraint
+	if ( colorIndex == B2_OVERFLOW_INDEX )
+	{
+		if ( color->contactCount == color->wideContactCapacity )
+		{
+			int oldCapacity = color->wideContactCapacity;
+			int newCapacity = b2MaxInt( 8, 2 * oldCapacity );
+			int elementSize = (int)sizeof( b2ContactConstraint );
+			color->overflowConstraints =
+				b2GrowAlloc( color->overflowConstraints, oldCapacity * elementSize, newCapacity * elementSize );
+			color->wideContactCapacity = newCapacity;
+		}
+	}
+	else
+	{
+		// Initial space
+		if ( color->wideContactCapacity == 0 )
+		{
+			int capacity = 8;
+			color->wideContactCapacity = capacity;
+			color->wideConstraints = b2Alloc( 8 * (int)sizeof( b2ContactConstraintWide ) );
+			color->contactCount = 0;
+		}
+
+		// Did the lane roll over to the next wide constraint?
+		if ( color->contactCount > 0 && color->contactCount % B2_SIMD_WIDTH == 0 )
+		{
+			// Grow if needed
+			int capacity = color->wideContactCapacity;
+			if ( B2_SIMD_WIDTH * color->contactCount == capacity )
+			{
+				int newCapacity = b2MaxInt( 8, 2 * capacity );
+				int elementSize = (int)sizeof( b2ContactConstraintWide );
+				color->wideConstraints = b2GrowAlloc( color->wideConstraints, capacity * elementSize, newCapacity * elementSize );
+				color->wideContactCapacity = newCapacity;
+			}
+		}
+	}
+
+	newContact->constraintIndex = color->contactCount;
+	newContact->colorIndex = colorIndex;
+
+	b2ContactId id = {
+		.index1 = newContact->contactId + 1,
+		.world0 = world->worldId,
+		.padding = 0,
+		.generation = contact->generation,
+	};
+
+	b2ContactIdArray_Push( &world->pendingContacts, id );
+
+	color->contactCount += 1;
+}
+
+void b2RemoveContactConstraint( b2World* world, int colorIndex, int localIndex )
+{
+	b2GraphColor* color = world->constraintGraph.colors + colorIndex;
+	b2ContactSim* contactSim = b2ContactSimArray_Get( &color->contactSims, localIndex );
+	B2_ASSERT( 0 <= contactSim->colorIndex && contactSim->colorIndex < B2_GRAPH_COLOR_COUNT );
+	int constraintIndex = contactSim->constraintIndex;
+	B2_ASSERT( 0 <= constraintIndex && constraintIndex < color->contactCount );
+
+	if ( colorIndex == B2_OVERFLOW_INDEX )
+	{
+		int lastConstraintIndex = color->contactCount - 1;
+
+		// If this is not the last constraint, then swap the last constraint into this slot.
+		if ( constraintIndex != lastConstraintIndex )
+		{
+			b2ContactConstraint* source = color->overflowConstraints + lastConstraintIndex;
+			b2ContactConstraint* target = color->overflowConstraints + constraintIndex;
+
+			memcpy( target, source, sizeof( b2ContactConstraint ) );
+
+			// todo is the same index as the contact sim moved below?
+			b2ContactSim* movedContact = b2ContactSimArray_Get( &color->contactSims, target->contactIndex );
+			movedContact->constraintIndex = constraintIndex;
+		}
+	}
+	else
+	{
+		int wideConstraintIndex = constraintIndex / B2_SIMD_WIDTH;
+		int laneIndex = constraintIndex % B2_SIMD_WIDTH;
+
+		int lastWideConstraintIndex = ( color->contactCount - 1 ) / B2_SIMD_WIDTH;
+		int lastLaneIndex = ( color->contactCount - 1 ) % B2_SIMD_WIDTH;
+
+		// If this is not the last constraint, then swap the last constraint into this slot.
+		if ( constraintIndex != color->contactCount - 1 )
+		{
+			int sourceLane = lastLaneIndex;
+			int targetLane = laneIndex;
+
+			b2ContactConstraintWide* source = color->wideConstraints + lastWideConstraintIndex;
+			b2ContactConstraintWide* target = color->wideConstraints + wideConstraintIndex;
+
+			// Copy lane by shifting the constraint start address by lane offset
+			static_assert( sizeof( b2ContactConstraintWide ) % sizeof( float ) == 0 );
+			int floatCount = sizeof( b2ContactConstraintWide ) / B2_SIMD_WIDTH;
+			float* restrict sourceFloats = (float*)source + sourceLane;
+			float* restrict targetFloats = (float*)target + targetLane;
+			for ( int i = 0; i < B2_SIMD_WIDTH * floatCount; i += B2_SIMD_WIDTH )
+			{
+				targetFloats[i] = sourceFloats[i];
+			}
+
+			// todo is the same index as the contact sim moved below?
+			int contactIndex = target->contactIndex[targetLane];
+			b2ContactSim* movedContact = b2ContactSimArray_Get( &color->contactSims, contactIndex );
+			movedContact->constraintIndex = constraintIndex;
+		}
+
+		color->contactCount -= 1;
+
+		contactSim->constraintIndex = B2_NULL_INDEX;
+		contactSim->colorIndex = B2_NULL_INDEX;
+	}
 }
 
 void b2RemoveContactFromGraph( b2World* world, int bodyIdA, int bodyIdB, int colorIndex, int localIndex )
 {
-	b2ConstraintGraph* graph = &world->constraintGraph;
-
 	B2_ASSERT( 0 <= colorIndex && colorIndex < B2_GRAPH_COLOR_COUNT );
-	b2GraphColor* color = graph->colors + colorIndex;
+	b2GraphColor* color = world->constraintGraph.colors + colorIndex;
+	B2_ASSERT( color->contactCount > 0 );
+
+	b2RemoveContactConstraint( world, colorIndex, localIndex );
 
 	if ( colorIndex != B2_OVERFLOW_INDEX )
 	{
@@ -212,8 +341,8 @@ void b2RemoveContactFromGraph( b2World* world, int bodyIdA, int bodyIdB, int col
 	}
 }
 
-// Notice that a joint cannot share the same color as a contact between the same two bodies. This means I can solve contacts and joints
-// in parallel with each other within each color.
+// Notice that a joint cannot share the same color as a contact between the same two bodies. This means I can solve contacts and
+// joints in parallel with each other within each color.
 static int b2AssignJointColor( b2ConstraintGraph* graph, int bodyIdA, int bodyIdB, b2BodyType typeA, b2BodyType typeB )
 {
 	B2_ASSERT( typeA == b2_dynamicBody || typeB == b2_dynamicBody );

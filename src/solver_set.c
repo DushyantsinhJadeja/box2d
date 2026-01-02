@@ -324,6 +324,9 @@ void b2TrySleepIsland( b2World* world, int islandId )
 			}
 
 			int localIndex = contact->localIndex;
+
+			b2RemoveContactConstraint( world, colorIndex, localIndex );
+
 			b2ContactSim* awakeContactSim = b2ContactSimArray_Get( &color->contactSims, localIndex );
 
 			int sleepContactIndex = sleepSet->contactSims.count;

@@ -134,8 +134,7 @@ typedef struct b2ContactSim
 	b2SimplexCache cache;
 
 	int constraintIndex;
-	int constraintLane;
-
+	int colorIndex;
 } b2ContactSim;
 
 void b2InitializeContactRegisters( void );
@@ -151,3 +150,4 @@ bool b2UpdateContact( b2World* world, b2ContactSim* contactSim, b2Shape* shapeA,
 
 B2_ARRAY_INLINE( b2Contact, b2Contact )
 B2_ARRAY_INLINE( b2ContactSim, b2ContactSim )
+B2_ARRAY_INLINE( b2ContactId, b2ContactId )

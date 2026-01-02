@@ -6,6 +6,7 @@
 #include "solver.h"
 
 typedef struct b2ContactSim b2ContactSim;
+typedef struct b2GraphColor b2GraphColor;
 
 typedef struct b2ContactConstraintPoint
 {
@@ -21,6 +22,7 @@ typedef struct b2ContactConstraintPoint
 
 typedef struct b2ContactConstraint
 {
+	int contactIndex;
 	int indexA;
 	int indexB;
 	b2Vec2 normal;
@@ -76,12 +78,9 @@ typedef struct b2Vec2W
 
 typedef struct b2ContactConstraintWide
 {
-	// B2_NULL_INDEX if static
+	int contactIndex[B2_SIMD_WIDTH];
 	int indexA[B2_SIMD_WIDTH];
-
-	// B2_NULL_INDEX if unused
 	int indexB[B2_SIMD_WIDTH];
-
 	b2FloatW invMassA, invMassB;
 	b2FloatW invIA, invIB;
 	b2Vec2W normal;
@@ -112,15 +111,18 @@ typedef struct b2ContactConstraintWide
 int b2GetContactConstraintSIMDByteCount( void );
 
 // Overflow contacts don't fit into the constraint graph coloring
-void b2PrepareOverflowContacts( b2StepContext* context );
+//void b2PrepareOverflowContacts( b2StepContext* context );
 void b2WarmStartOverflowContacts( b2StepContext* context );
 void b2SolveOverflowContacts( b2StepContext* context, bool useBias );
 void b2ApplyOverflowRestitution( b2StepContext* context );
 void b2StoreOverflowImpulses( b2StepContext* context );
 
 // Contacts that live within the constraint graph coloring
-void b2PrepareContactsTask( int startIndex, int endIndex, b2StepContext* context );
+//void b2PrepareContactsTask( int startIndex, int endIndex, b2StepContext* context );
 void b2WarmStartContactsTask( int startIndex, int endIndex, b2StepContext* context, int colorIndex );
-void b2SolveContactsTask( int startIndex, int endIndex, b2StepContext* context, int colorIndex, bool useBias );
+void b2SolveContactsTask( int startIndex, int endIndex, b2StepContext* context, int colorIndex, bool useBias, bool lastCall );
 void b2ApplyRestitutionTask( int startIndex, int endIndex, b2StepContext* context, int colorIndex );
-void b2StoreImpulsesTask( int startIndex, int endIndex, b2StepContext* context );
+//void b2StoreImpulsesTask( int startIndex, int endIndex, b2StepContext* context );
+
+void b2PrepareContact( b2StepContext* context, int colorIndex, int contactIndex );
+void b2PreparePendingContacts( int startIndex, int endIndex, b2StepContext* context );

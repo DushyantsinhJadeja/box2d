@@ -15,6 +15,7 @@
 #include "constants.h"
 #include "constraint_graph.h"
 #include "contact.h"
+#include "contact_solver.h"
 #include "core.h"
 #include "ctz.h"
 #include "island.h"
@@ -182,6 +183,7 @@ b2WorldId b2CreateWorld( const b2WorldDef* def )
 	world->contactEndEvents[1] = b2ContactEndTouchEventArray_Create( 4 );
 	world->contactHitEvents = b2ContactHitEventArray_Create( 4 );
 	world->jointEvents = b2JointEventArray_Create( 4 );
+	world->pendingContacts = b2ContactIdArray_Create( 16 );
 	world->endEventArrayIndex = 0;
 
 	world->stepIndex = 0;
@@ -296,6 +298,7 @@ void b2DestroyWorld( b2WorldId worldId )
 	b2ContactEndTouchEventArray_Destroy( world->contactEndEvents + 1 );
 	b2ContactHitEventArray_Destroy( &world->contactHitEvents );
 	b2JointEventArray_Destroy( &world->jointEvents );
+	b2ContactIdArray_Destroy( &world->pendingContacts );
 
 	int chainCapacity = world->chainShapes.count;
 	for ( int i = 0; i < chainCapacity; ++i )
@@ -432,6 +435,13 @@ static void b2CollideTask( int startIndex, int endIndex, uint32_t threadIndex, v
 			{
 				contactSim->simFlags |= b2_simStoppedTouching;
 				b2SetBit( &taskContext->contactStateBitSet, contactId );
+			}
+			else if (touching == true && wasTouching == true )
+			{
+				B2_ASSERT( contactSim->constraintIndex != B2_NULL_INDEX );
+				B2_ASSERT( contactSim->colorIndex != B2_NULL_INDEX );
+
+				b2PrepareContact( stepContext, contactSim->colorIndex, contactIndex );
 			}
 
 			// To make this work, the time of impact code needs to adjust the target
@@ -779,6 +789,9 @@ void b2World_Step( b2WorldId worldId, float timeStep, int subStepCount )
 		b2Solve( world, &context );
 		world->profile.solve = b2GetMilliseconds( solveTicks );
 	}
+
+	// Clear pending contacts
+	world->pendingContacts.count = 0;
 
 	// Update sensors
 	{

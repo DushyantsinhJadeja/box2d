@@ -48,8 +48,8 @@ typedef struct b2GraphColor
 		struct b2ContactConstraint* overflowConstraints;
 	};
 
-	int contactConstraintCount;
-	int contactConstraintCapacity;
+	int contactCount;
+	int wideContactCapacity;
 
 } b2GraphColor;
 
@@ -63,7 +63,9 @@ void b2CreateGraph( b2ConstraintGraph* graph, int bodyCapacity );
 void b2DestroyGraph( b2ConstraintGraph* graph );
 
 void b2AddContactToGraph( b2World* world, b2ContactSim* contactSim, b2Contact* contact );
-void b2RemoveContactFromGraph( b2World* world, int bodyIdA, int bodyIdB, int colorIndex, int localIndex );
+void b2RemoveContactConstraint( b2World* world, int colorIndex, int localIndex );
+void b2RemoveContactFromGraph( b2World* world, int bodyIdA, int bodyIdB,
+																				int colorIndex, int localIndex );
 
 b2JointSim* b2CreateJointInGraph( b2World* world, b2Joint* joint );
 void b2AddJointToGraph( b2World* world, b2JointSim* jointSim, b2Joint* joint );

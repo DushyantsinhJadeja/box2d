@@ -462,7 +462,8 @@ public:
 
 		float y = 0.75f;
 
-		for ( int i = 0; i < 10; ++i )
+		// todo testing
+		for ( int i = 0; i < 1; ++i )
 		{
 			bodyDef.position.y = y;
 

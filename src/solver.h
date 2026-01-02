@@ -40,6 +40,7 @@ typedef enum b2SolverBlockType
 {
 	b2_bodyBlock,
 	b2_jointBlock,
+	b2_contactPrepareBlock,
 	b2_contactBlock,
 	b2_graphJointBlock,
 	b2_graphContactBlock
@@ -119,13 +120,15 @@ typedef struct b2StepContext
 	// to constraint graph colors
 	b2ContactSim** contacts;
 
-	struct b2ContactConstraintWide* simdContactConstraints;
+	//struct b2ContactConstraintWide* simdContactConstraints;
 	int activeColorCount;
 	int workerCount;
 
 	b2SolverStage* stages;
 	int stageCount;
 	bool enableWarmStarting;
+
+	b2AtomicInt lastCall;
 
 	// todo padding to prevent false sharing
 	char dummy1[64];
